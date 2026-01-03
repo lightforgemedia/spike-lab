@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SPIKE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/spikes"
+
+usage() {
+    cat <<EOF
+spike - Manage research spikes with Jules integration
+
+USAGE:
+    spike new <name> [description]   Create a new spike directory
+    spike jules <name> <task>        Send spike task to Jules
+    spike list                       List all spikes
+    spike status <name>              Show spike status
+    spike help                       Show this help
+
+EXAMPLES:
+    spike new graphql-perf "Investigate GraphQL query performance"
+    spike jules graphql-perf "Profile and optimize N+1 queries"
+    spike list
+EOF
+}
+
+cmd_new() {
+    local name="${1:-}"
+    local desc="${2:-}"
+
+    if [[ -z "$name" ]]; then
+        echo "Error: spike name required" >&2
+        echo "Usage: spike new <name> [description]" >&2
+        exit 1
+    fi
+
+    local spike_path="$SPIKE_DIR/$name"
+
+    if [[ -d "$spike_path" ]]; then
+        echo "Error: spike '$name' already exists" >&2
+        exit 1
+    fi
+
+    mkdir -p "$spike_path"/{notes,artifacts}
+
+    cat > "$spike_path/README.md" <<SPIKE_README
+# Spike: $name
+
+${desc:-_No description provided_}
+
+## Status
+- [ ] In Progress
+- [ ] Complete
+
+## Goal
+_Define the research goal here_
+
+## Tasks
+- [ ] Initial research
+- [ ] Prototype
+- [ ] Document findings
+
+## Findings
+_Record findings here_
+
+## Jules Sessions
+_Track Jules session IDs here_
+
+## Artifacts
+See \`./artifacts/\` for any code, diagrams, or outputs.
+
+## Notes
+See \`./notes/\` for detailed notes.
+SPIKE_README
+
+    echo "Created spike: $spike_path"
+    echo "  - README.md"
+    echo "  - notes/"
+    echo "  - artifacts/"
+}
+
+cmd_jules() {
+    local name="${1:-}"
+    local task="${2:-}"
+
+    if [[ -z "$name" ]] || [[ -z "$task" ]]; then
+        echo "Error: spike name and task required" >&2
+        echo "Usage: spike jules <name> <task>" >&2
+        exit 1
+    fi
+
+    local spike_path="$SPIKE_DIR/$name"
+
+    if [[ ! -d "$spike_path" ]]; then
+        echo "Error: spike '$name' does not exist" >&2
+        echo "Create it first: spike new $name" >&2
+        exit 1
+    fi
+
+    echo "Sending to Jules: $task"
+    jules new "$task"
+
+    # Log the task
+    echo "$(date -Iseconds) | $task" >> "$spike_path/jules-tasks.log"
+}
+
+cmd_list() {
+    if [[ ! -d "$SPIKE_DIR" ]] || [[ -z "$(ls -A "$SPIKE_DIR" 2>/dev/null)" ]]; then
+        echo "No spikes found. Create one with: spike new <name>"
+        exit 0
+    fi
+
+    echo "Spikes:"
+    for spike in "$SPIKE_DIR"/*/; do
+        if [[ -d "$spike" ]]; then
+            local name=$(basename "$spike")
+            local status="active"
+            if grep -q "\[x\] Complete" "$spike/README.md" 2>/dev/null; then
+                status="complete"
+            fi
+            printf "  %-30s [%s]\n" "$name" "$status"
+        fi
+    done
+}
+
+cmd_status() {
+    local name="${1:-}"
+
+    if [[ -z "$name" ]]; then
+        echo "Error: spike name required" >&2
+        exit 1
+    fi
+
+    local spike_path="$SPIKE_DIR/$name"
+
+    if [[ ! -d "$spike_path" ]]; then
+        echo "Error: spike '$name' does not exist" >&2
+        exit 1
+    fi
+
+    echo "=== Spike: $name ==="
+    echo ""
+
+    if [[ -f "$spike_path/README.md" ]]; then
+        head -30 "$spike_path/README.md"
+    fi
+
+    if [[ -f "$spike_path/jules-tasks.log" ]]; then
+        echo ""
+        echo "=== Jules Tasks ==="
+        cat "$spike_path/jules-tasks.log"
+    fi
+}
+
+# Main dispatch
+case "${1:-help}" in
+    new)    shift; cmd_new "$@" ;;
+    jules)  shift; cmd_jules "$@" ;;
+    list)   cmd_list ;;
+    status) shift; cmd_status "$@" ;;
+    help|--help|-h) usage ;;
+    *)
+        echo "Unknown command: $1" >&2
+        usage >&2
+        exit 1
+        ;;
+esac
