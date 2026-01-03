@@ -14,9 +14,10 @@ USAGE:
     spike status <name>              Show spike status
 
     JULES INTERACTION:
+    spike check                      Check session status (stuck/working/done)
     spike watch                      Launch Jules TUI (monitor/assist sessions)
     spike sessions                   List all Jules sessions
-    spike pull <session-id>          Pull session results to artifacts/
+    spike pull <session-id>          Pull session results
     spike teleport <session-id>      Checkout branch with Jules' changes
 
     spike help                       Show this help
@@ -169,6 +170,55 @@ cmd_sessions() {
     jules remote list --session
 }
 
+cmd_check() {
+    local output
+    output=$(jules remote list --session 2>&1)
+
+    echo "=== Session Status ==="
+    echo "$output"
+    echo ""
+
+    # Parse and summarize
+    local total=0
+    local working=0
+    local stuck=0
+    local done=0
+    local needs_input=0
+
+    while IFS= read -r line; do
+        # Skip header and empty/whitespace-only lines
+        [[ "$line" =~ ^[[:space:]]*ID ]] && continue
+        [[ -z "${line// }" ]] && continue
+        [[ ! "$line" =~ [0-9] ]] && continue  # Must have session ID (number)
+
+        ((total++)) || true
+
+        if [[ "$line" =~ "working" ]] || [[ "$line" =~ "running" ]] || [[ "$line" =~ "in progress" ]]; then
+            ((working++)) || true
+        elif [[ "$line" =~ "stuck" ]] || [[ "$line" =~ "blocked" ]] || [[ "$line" =~ "error" ]]; then
+            ((stuck++)) || true
+            echo "⚠️  STUCK: $line"
+        elif [[ "$line" =~ "waiting" ]] || [[ "$line" =~ "input" ]] || [[ "$line" =~ "review" ]]; then
+            ((needs_input++)) || true
+            echo "👀 NEEDS INPUT: $line"
+        elif [[ "$line" =~ "done" ]] || [[ "$line" =~ "complete" ]] || [[ "$line" =~ "finished" ]]; then
+            ((done++)) || true
+        fi
+    done <<< "$output"
+
+    if [[ $total -eq 0 ]]; then
+        echo "No active sessions"
+    else
+        echo ""
+        echo "Summary: $total sessions | $working working | $needs_input need input | $stuck stuck | $done done"
+
+        if [[ $stuck -gt 0 ]] || [[ $needs_input -gt 0 ]]; then
+            echo ""
+            echo "Run 'spike watch' to assist sessions that need attention"
+        fi
+    fi
+}
+
 cmd_pull() {
     local session_id="${1:-}"
 
@@ -204,6 +254,7 @@ case "${1:-help}" in
     jules)    shift; cmd_jules "$@" ;;
     list)     cmd_list ;;
     status)   shift; cmd_status "$@" ;;
+    check)    cmd_check ;;
     watch)    cmd_watch ;;
     sessions) cmd_sessions ;;
     pull)     shift; cmd_pull "$@" ;;
