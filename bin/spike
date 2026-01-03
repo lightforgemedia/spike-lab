@@ -12,12 +12,21 @@ USAGE:
     spike jules <name> <task>        Send spike task to Jules
     spike list                       List all spikes
     spike status <name>              Show spike status
+
+    JULES INTERACTION:
+    spike watch                      Launch Jules TUI (monitor/assist sessions)
+    spike sessions                   List all Jules sessions
+    spike pull <session-id>          Pull session results to artifacts/
+    spike teleport <session-id>      Checkout branch with Jules' changes
+
     spike help                       Show this help
 
 EXAMPLES:
     spike new graphql-perf "Investigate GraphQL query performance"
     spike jules graphql-perf "Profile and optimize N+1 queries"
-    spike list
+    spike sessions                   # find session ID
+    spike watch                      # interact with stuck session
+    spike pull 123456                # grab results
 EOF
 }
 
@@ -149,12 +158,56 @@ cmd_status() {
     fi
 }
 
+cmd_watch() {
+    echo "Launching Jules TUI..."
+    echo "Tip: Use this to monitor sessions, provide guidance, or unstick agents"
+    jules
+}
+
+cmd_sessions() {
+    echo "=== Jules Sessions ==="
+    jules remote list --session
+}
+
+cmd_pull() {
+    local session_id="${1:-}"
+
+    if [[ -z "$session_id" ]]; then
+        echo "Error: session ID required" >&2
+        echo "Usage: spike pull <session-id>" >&2
+        echo "Run 'spike sessions' to list available sessions" >&2
+        exit 1
+    fi
+
+    echo "Pulling session $session_id..."
+    jules remote pull --session "$session_id"
+}
+
+cmd_teleport() {
+    local session_id="${1:-}"
+
+    if [[ -z "$session_id" ]]; then
+        echo "Error: session ID required" >&2
+        echo "Usage: spike teleport <session-id>" >&2
+        echo "Run 'spike sessions' to list available sessions" >&2
+        exit 1
+    fi
+
+    echo "Teleporting to session $session_id..."
+    echo "This will checkout the branch with Jules' changes"
+    jules teleport "$session_id"
+}
+
 # Main dispatch
 case "${1:-help}" in
-    new)    shift; cmd_new "$@" ;;
-    jules)  shift; cmd_jules "$@" ;;
-    list)   cmd_list ;;
-    status) shift; cmd_status "$@" ;;
+    new)      shift; cmd_new "$@" ;;
+    jules)    shift; cmd_jules "$@" ;;
+    list)     cmd_list ;;
+    status)   shift; cmd_status "$@" ;;
+    watch)    cmd_watch ;;
+    sessions) cmd_sessions ;;
+    pull)     shift; cmd_pull "$@" ;;
+    teleport) shift; cmd_teleport "$@" ;;
     help|--help|-h) usage ;;
     *)
         echo "Unknown command: $1" >&2
