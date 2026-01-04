@@ -83,7 +83,8 @@ Examples:
         console.log(`Title: ${session.title}`)
         console.log(`URL: ${session.url}`)
 
-        const { activities } = await client.listActivities(sessionId, { pageSize: 5 })
+        const response = await client.listActivities(sessionId, { pageSize: 5 })
+        const activities = response.activities ?? []
         if (activities.length > 0) {
           console.log('\nRecent activities:')
           for (const a of activities.slice(-5)) {
