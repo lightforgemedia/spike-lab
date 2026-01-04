@@ -323,4 +323,53 @@ export class JulesClient {
 
     return null
   }
+
+  // ============ Workflow Automation ============
+
+  /**
+   * Wait for session, extract patch, and return it ready to apply
+   *
+   * @example
+   * ```ts
+   * const result = await client.waitAndExtractPatch(sessionId)
+   * if (result.patch) {
+   *   // Write to file and apply with git
+   *   await Bun.write('/tmp/fix.patch', result.patch.patch)
+   *   // Then: git apply /tmp/fix.patch
+   * }
+   * ```
+   */
+  async waitAndExtractPatch(
+    sessionId: string,
+    options: { pollInterval?: number; timeout?: number; onProgress?: (state: string) => void } = {}
+  ): Promise<{ session: Session; patch: ExtractedPatch | null }> {
+    const { pollInterval = 5000, timeout = 600000, onProgress } = options
+    const start = Date.now()
+
+    while (Date.now() - start < timeout) {
+      const session = await this.getSession(sessionId)
+
+      if (onProgress) {
+        onProgress(session.state)
+      }
+
+      // Terminal states
+      if (session.state === 'COMPLETED' || session.state === 'FAILED' || session.state === 'CANCELLED') {
+        const patch = await this.getLatestPatch(sessionId)
+        return { session, patch }
+      }
+
+      // Auto-approve if waiting
+      if (session.state === 'AWAITING_APPROVAL') {
+        await this.approvePlan(sessionId)
+        if (onProgress) {
+          onProgress('APPROVED')
+        }
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, pollInterval))
+    }
+
+    throw new Error(`Timeout waiting for session ${sessionId}`)
+  }
 }

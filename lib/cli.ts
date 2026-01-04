@@ -44,6 +44,7 @@ Commands:
   message <session-id> <msg>  Send message to session
   approve <session-id>        Approve session plan
   wait <session-id>           Wait for session to complete
+  apply <session-id> [dir]    Wait, extract, apply patch, verify (full workflow)
   patch <session-id>          Extract latest patch from session
   patches <session-id>        Extract all patches from session
   plan <session-id>           Get current plan steps
@@ -144,6 +145,99 @@ Examples:
           timeout: 300000,
         })
         console.log(`Session completed with state: ${session.state}`)
+        break
+      }
+
+      case 'apply': {
+        const sessionId = args[0]
+        const workDir = args[1] || process.cwd()
+        if (!sessionId) {
+          console.error('Usage: apply <session-id> [directory]')
+          process.exit(1)
+        }
+
+        // Step 1: Wait for session and extract patch
+        console.log(`⏳ Waiting for session ${sessionId}...`)
+        let lastState = ''
+        const { session, patch } = await client.waitAndExtractPatch(sessionId, {
+          pollInterval: 5000,
+          timeout: 600000,
+          onProgress: (state) => {
+            if (state !== lastState) {
+              console.log(`   State: ${state}`)
+              lastState = state
+            }
+          },
+        })
+
+        if (session.state !== 'COMPLETED') {
+          console.error(`❌ Session ended with state: ${session.state}`)
+          process.exit(1)
+        }
+
+        if (!patch) {
+          console.error('❌ No patch found in session')
+          process.exit(1)
+        }
+
+        console.log(`✓ Session completed, patch extracted (${patch.patch.split('\n').length} lines)`)
+
+        // Step 2: Write patch to temp file
+        const patchFile = `/tmp/jules-${sessionId}.patch`
+        await Bun.write(patchFile, patch.patch)
+        console.log(`✓ Patch written to ${patchFile}`)
+
+        // Step 3: Apply patch
+        console.log(`⏳ Applying patch in ${workDir}...`)
+        const applyProc = Bun.spawn(['git', 'apply', '--check', patchFile], {
+          cwd: workDir,
+          stdout: 'pipe',
+          stderr: 'pipe',
+        })
+        const applyResult = await applyProc.exited
+
+        if (applyResult !== 0) {
+          const stderr = await new Response(applyProc.stderr).text()
+          console.error(`❌ Patch check failed:\n${stderr}`)
+          console.error(`Patch saved at: ${patchFile}`)
+          process.exit(1)
+        }
+
+        // Actually apply
+        const realApply = Bun.spawn(['git', 'apply', patchFile], {
+          cwd: workDir,
+          stdout: 'pipe',
+          stderr: 'pipe',
+        })
+        await realApply.exited
+        console.log('✓ Patch applied')
+
+        // Step 4: Verify (try cargo check if Cargo.toml exists)
+        const cargoToml = `${workDir}/Cargo.toml`
+        const hasCargoToml = await Bun.file(cargoToml).exists()
+
+        if (hasCargoToml) {
+          console.log('⏳ Running cargo check...')
+          const checkProc = Bun.spawn(['cargo', 'check'], {
+            cwd: workDir,
+            stdout: 'pipe',
+            stderr: 'pipe',
+          })
+          const checkResult = await checkProc.exited
+
+          if (checkResult !== 0) {
+            const stderr = await new Response(checkProc.stderr).text()
+            console.error(`⚠️  cargo check failed:\n${stderr.slice(-500)}`)
+          } else {
+            console.log('✓ cargo check passed')
+          }
+        }
+
+        // Summary
+        console.log(`\n✅ Done! Patch from session ${sessionId} applied.`)
+        if (patch.suggestedCommitMessage) {
+          console.log(`\nSuggested commit message:\n${patch.suggestedCommitMessage}`)
+        }
         break
       }
 
