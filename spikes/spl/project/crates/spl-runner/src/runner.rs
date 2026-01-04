@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
-use spl_artifacts::{EvidenceManifest, EvidenceRole, FsArtifactStore, GateRecord};
+use spl_artifacts::{ArtifactStore, EvidenceManifest, EvidenceRole, FsArtifactStore, GateRecord};
 use spl_core::{GateName, GateOutcome, GateStatus, Lane, QueueId, QueueItem, RunId, TaskId, TaskStatus, VcsType};
 use spl_storage::Storage;
 use spl_storage_sqlite::SqliteStorage;
@@ -140,11 +140,11 @@ impl Runner {
         // pre_smoke stub
         self.write_gate(&run_id, &run_dir, &mut manifest, GateName::PreSmoke, GateStatus::Pass, EvidenceRole::PreSmoke, b"pre_smoke: PASS (stub)")?;
         // audit stub
-        self.write_gate(&run_id, &run_dir, &mut manifest, GateName::Audit, GateStatus::Pass, EvidenceRole::Audit, b"{"result":"PASS"}")?;
+        self.write_gate(&run_id, &run_dir, &mut manifest, GateName::Audit, GateStatus::Pass, EvidenceRole::Audit, b"{\"result\":\"PASS\"}")?;
         // review stub
-        self.write_gate(&run_id, &run_dir, &mut manifest, GateName::AdversarialReview, GateStatus::Pass, EvidenceRole::Review, b"{"result":"PASS"}")?;
+        self.write_gate(&run_id, &run_dir, &mut manifest, GateName::AdversarialReview, GateStatus::Pass, EvidenceRole::Review, b"{\"result\":\"PASS\"}")?;
         // validate stub
-        self.write_gate(&run_id, &run_dir, &mut manifest, GateName::Validate, GateStatus::Pass, EvidenceRole::Validate, b"{"result":"PASS"}")?;
+        self.write_gate(&run_id, &run_dir, &mut manifest, GateName::Validate, GateStatus::Pass, EvidenceRole::Validate, b"{\"result\":\"PASS\"}")?;
 
         // Snapshot + patch (may be empty if no changes)
         let base = self.vcs.get_base_rev(&self.repo_root)?;
@@ -220,7 +220,10 @@ impl Runner {
     ) -> Result<()> {
         let name = format!("{:?}.txt", gate);
         let _path = self.artifacts.write_role_bytes(run_dir, role, &name, bytes)?;
-        self.storage.record_gate_outcome(run_id, &GateOutcome { gate, status, remediation: None })?;
+        self.storage.record_gate_outcome(
+            run_id,
+            &GateOutcome { gate: gate.clone(), status: status.clone(), remediation: None },
+        )?;
         manifest.gates.push(GateRecord {
             gate: format!("{:?}", gate),
             status: format!("{:?}", status),
