@@ -35,6 +35,15 @@ export type {
   Session,
   SessionOutput,
   Activity,
+  // Activity artifacts
+  ActivityArtifact,
+  BashOutput,
+  ChangeSet,
+  GitPatch,
+  PlanGenerated,
+  Plan,
+  PlanStep,
+  ExtractedPatch,
   // Request types
   CreateSessionRequest,
   SendMessageRequest,

@@ -83,11 +83,50 @@ export interface Session {
   requirePlanApproval?: boolean
 }
 
+// ============ Activity Artifacts ============
+
+export interface BashOutput {
+  command: string
+  output?: string
+  exitCode?: number
+}
+
+export interface GitPatch {
+  unidiffPatch: string
+  baseCommitId?: string
+  suggestedCommitMessage?: string
+}
+
+export interface ChangeSet {
+  source: string
+  gitPatch?: GitPatch
+}
+
+export interface ActivityArtifact {
+  bashOutput?: BashOutput
+  changeSet?: ChangeSet
+}
+
+export interface PlanStep {
+  id: string
+  title: string
+  index?: number
+}
+
+export interface Plan {
+  id: string
+  steps: PlanStep[]
+}
+
+export interface PlanGenerated {
+  plan: Plan
+}
+
 export interface Activity {
   /** Resource name: sessions/{sessionId}/activities/{activityId} */
   name: string
-  /** Activity type */
-  activityType: ActivityType
+  /** Activity ID */
+  id: string
   /** Who originated this activity */
   originator: ActivityOriginator
   /** Activity content */
@@ -96,6 +135,31 @@ export interface Activity {
   summary?: string
   /** Creation timestamp (ISO 8601) */
   createTime: string
+  /** Artifacts (bash outputs, patches) */
+  artifacts?: ActivityArtifact[]
+  /** Plan generated (if planGenerated activity) */
+  planGenerated?: PlanGenerated
+  /** Progress update marker */
+  progressUpdated?: Record<string, unknown>
+  /** Plan approved marker */
+  planApproved?: Record<string, unknown>
+}
+
+// ============ Extracted Patch ============
+
+export interface ExtractedPatch {
+  /** Session ID */
+  sessionId: string
+  /** The unified diff patch content */
+  patch: string
+  /** Base commit ID */
+  baseCommitId?: string
+  /** Suggested commit message */
+  suggestedCommitMessage?: string
+  /** Activity ID that contained this patch */
+  activityId: string
+  /** When this patch was created */
+  createdAt: string
 }
 
 // ============ Request Types ============

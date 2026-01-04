@@ -8,6 +8,8 @@ import type {
   ListSourcesResponse,
   ListOptions,
   ApiErrorResponse,
+  ExtractedPatch,
+  BashOutput,
 } from './types'
 import { JulesError } from './errors'
 
@@ -218,5 +220,107 @@ export class JulesClient {
     }
 
     throw new Error(`Timeout waiting for session ${sessionId} to complete`)
+  }
+
+  // ============ Patch Extraction ============
+
+  /**
+   * Extract all git patches from a session's activities
+   * Returns patches in chronological order (oldest first)
+   */
+  async extractPatches(sessionId: string): Promise<ExtractedPatch[]> {
+    const patches: ExtractedPatch[] = []
+
+    for await (const activity of this.iterateActivities(sessionId, 50)) {
+      if (!activity.artifacts) continue
+
+      for (const artifact of activity.artifacts) {
+        if (artifact.changeSet?.gitPatch?.unidiffPatch) {
+          const extracted: ExtractedPatch = {
+            sessionId,
+            patch: artifact.changeSet.gitPatch.unidiffPatch,
+            activityId: activity.id,
+            createdAt: activity.createTime,
+          }
+          if (artifact.changeSet.gitPatch.baseCommitId) {
+            extracted.baseCommitId = artifact.changeSet.gitPatch.baseCommitId
+          }
+          if (artifact.changeSet.gitPatch.suggestedCommitMessage) {
+            extracted.suggestedCommitMessage = artifact.changeSet.gitPatch.suggestedCommitMessage
+          }
+          patches.push(extracted)
+        }
+      }
+    }
+
+    // Return in chronological order (API returns newest first)
+    return patches.reverse()
+  }
+
+  /**
+   * Get the latest/final patch from a session
+   * This is typically the one you want to apply
+   */
+  async getLatestPatch(sessionId: string): Promise<ExtractedPatch | null> {
+    // Fetch recent activities (newest first)
+    const response = await this.listActivities(sessionId, { pageSize: 50 })
+
+    for (const activity of response.activities) {
+      if (!activity.artifacts) continue
+
+      for (const artifact of activity.artifacts) {
+        if (artifact.changeSet?.gitPatch?.unidiffPatch) {
+          const extracted: ExtractedPatch = {
+            sessionId,
+            patch: artifact.changeSet.gitPatch.unidiffPatch,
+            activityId: activity.id,
+            createdAt: activity.createTime,
+          }
+          if (artifact.changeSet.gitPatch.baseCommitId) {
+            extracted.baseCommitId = artifact.changeSet.gitPatch.baseCommitId
+          }
+          if (artifact.changeSet.gitPatch.suggestedCommitMessage) {
+            extracted.suggestedCommitMessage = artifact.changeSet.gitPatch.suggestedCommitMessage
+          }
+          return extracted
+        }
+      }
+    }
+
+    return null
+  }
+
+  /**
+   * Extract bash command outputs from a session's activities
+   */
+  async extractBashOutputs(sessionId: string): Promise<BashOutput[]> {
+    const outputs: BashOutput[] = []
+
+    for await (const activity of this.iterateActivities(sessionId, 50)) {
+      if (!activity.artifacts) continue
+
+      for (const artifact of activity.artifacts) {
+        if (artifact.bashOutput) {
+          outputs.push(artifact.bashOutput)
+        }
+      }
+    }
+
+    return outputs.reverse()
+  }
+
+  /**
+   * Get the current plan steps from a session
+   */
+  async getPlan(sessionId: string): Promise<{ id: string; steps: { title: string; index?: number }[] } | null> {
+    const response = await this.listActivities(sessionId, { pageSize: 50 })
+
+    for (const activity of response.activities) {
+      if (activity.planGenerated?.plan) {
+        return activity.planGenerated.plan
+      }
+    }
+
+    return null
   }
 }

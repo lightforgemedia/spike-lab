@@ -44,10 +44,15 @@ Commands:
   message <session-id> <msg>  Send message to session
   approve <session-id>        Approve session plan
   wait <session-id>           Wait for session to complete
+  patch <session-id>          Extract latest patch from session
+  patches <session-id>        Extract all patches from session
+  plan <session-id>           Get current plan steps
+  bash <session-id>           List bash command outputs
 
 Examples:
   bun run lib/cli.ts sessions
   bun run lib/cli.ts message 123456 "Try using the v2 API"
+  bun run lib/cli.ts patch 123456 > fix.patch && git apply fix.patch
 `)
     process.exit(0)
   }
@@ -139,6 +144,90 @@ Examples:
           timeout: 300000,
         })
         console.log(`Session completed with state: ${session.state}`)
+        break
+      }
+
+      case 'patch': {
+        const sessionId = args[0]
+        if (!sessionId) {
+          console.error('Usage: patch <session-id>')
+          process.exit(1)
+        }
+
+        const patch = await client.getLatestPatch(sessionId)
+        if (!patch) {
+          console.error('No patches found in session')
+          process.exit(1)
+        }
+
+        // Output just the patch (for piping to git apply)
+        console.log(patch.patch)
+        break
+      }
+
+      case 'patches': {
+        const sessionId = args[0]
+        if (!sessionId) {
+          console.error('Usage: patches <session-id>')
+          process.exit(1)
+        }
+
+        const patches = await client.extractPatches(sessionId)
+        if (patches.length === 0) {
+          console.error('No patches found in session')
+          process.exit(1)
+        }
+
+        console.error(`Found ${patches.length} patch(es):`)
+        for (let i = 0; i < patches.length; i++) {
+          const p = patches[i]!
+          console.error(`\n--- Patch ${i + 1} (${p.activityId}) ---`)
+          if (p.suggestedCommitMessage) {
+            console.error(`Commit message: ${p.suggestedCommitMessage.split('\n')[0]}`)
+          }
+          console.log(p.patch)
+        }
+        break
+      }
+
+      case 'plan': {
+        const sessionId = args[0]
+        if (!sessionId) {
+          console.error('Usage: plan <session-id>')
+          process.exit(1)
+        }
+
+        const plan = await client.getPlan(sessionId)
+        if (!plan) {
+          console.log('No plan found for session')
+        } else {
+          console.log(`Plan (${plan.id}):`)
+          for (const step of plan.steps) {
+            const idx = step.index ?? 0
+            console.log(`  ${idx + 1}. ${step.title}`)
+          }
+        }
+        break
+      }
+
+      case 'bash': {
+        const sessionId = args[0]
+        if (!sessionId) {
+          console.error('Usage: bash <session-id>')
+          process.exit(1)
+        }
+
+        const outputs = await client.extractBashOutputs(sessionId)
+        if (outputs.length === 0) {
+          console.log('No bash commands found in session')
+        } else {
+          console.log(`Found ${outputs.length} command(s):`)
+          for (const out of outputs) {
+            const status = out.exitCode === 0 ? '✓' : out.exitCode === null ? '?' : `✗(${out.exitCode})`
+            const cmd = out.command.length > 80 ? out.command.slice(0, 77) + '...' : out.command
+            console.log(`  ${status} ${cmd}`)
+          }
+        }
         break
       }
 
