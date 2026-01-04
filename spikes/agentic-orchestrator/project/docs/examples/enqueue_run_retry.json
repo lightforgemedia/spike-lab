@@ -1,0 +1,25 @@
+{
+  "project_path": ".",
+  "intent": { "goal": "Example: retries" },
+  "workflow": {
+    "name": "retry-example",
+    "description": "Demonstrates max_attempts retry behavior",
+    "nodes": [
+      {
+        "id": "flaky",
+        "type": "exec_block",
+        "exec": {
+          "executor": "local",
+          "workdir": ".",
+          "env": {},
+          "max_attempts": 2,
+          "commands": [
+            { "name": "always-fail", "argv": ["bash", "-c", "echo failing; exit 1"], "allow_failure": false }
+          ],
+          "allow_shell": true
+        }
+      }
+    ],
+    "edges": []
+  }
+}

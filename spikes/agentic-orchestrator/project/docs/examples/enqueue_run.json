@@ -1,0 +1,39 @@
+{
+  "project_path": ".",
+  "intent": {
+    "goal": "Run build + tests for current repo"
+  },
+  "workflow": {
+    "name": "rust-ci",
+    "description": "Build & test (example)",
+    "nodes": [
+      {
+        "id": "fmt",
+        "type": "exec_block",
+        "exec": {
+          "executor": "local",
+          "workdir": ".",
+          "env": {},
+          "commands": [
+            { "name": "fmt", "argv": ["cargo", "fmt", "--check"] }
+          ]
+        }
+      },
+      {
+        "id": "test",
+        "type": "exec_block",
+        "exec": {
+          "executor": "local",
+          "workdir": ".",
+          "env": {},
+          "commands": [
+            { "name": "test", "argv": ["cargo", "test", "--locked"] }
+          ]
+        }
+      }
+    ],
+    "edges": [
+      { "from": "fmt", "to": "test" }
+    ]
+  }
+}

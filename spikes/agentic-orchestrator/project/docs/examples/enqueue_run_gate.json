@@ -1,0 +1,48 @@
+{
+  "project_path": ".",
+  "intent": { "goal": "Example: gate approval" },
+  "workflow": {
+    "name": "gate-example",
+    "description": "Demonstrates needs_human gate approval",
+    "nodes": [
+      {
+        "id": "precheck",
+        "type": "exec_block",
+        "exec": {
+          "executor": "local",
+          "workdir": ".",
+          "env": {},
+          "commands": [
+            { "name": "precheck", "argv": ["bash", "-c", "echo precheck ok; exit 0"], "allow_failure": false }
+          ],
+          "allow_shell": true
+        }
+      },
+      {
+        "id": "approval",
+        "type": "gate",
+        "config": {
+          "requires_approval": true,
+          "message": "Approve to continue"
+        }
+      },
+      {
+        "id": "post",
+        "type": "exec_block",
+        "exec": {
+          "executor": "local",
+          "workdir": ".",
+          "env": {},
+          "commands": [
+            { "name": "post", "argv": ["bash", "-c", "echo post ok; exit 0"], "allow_failure": false }
+          ],
+          "allow_shell": true
+        }
+      }
+    ],
+    "edges": [
+      { "from": "precheck", "to": "approval" },
+      { "from": "approval", "to": "post" }
+    ]
+  }
+}

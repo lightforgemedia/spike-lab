@@ -1,0 +1,15 @@
+[package]
+name = "orchestratorctl"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+orchestrator-core = { path = "../orchestrator-core" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+reqwest.workspace = true
+clap.workspace = true
+tokio.workspace = true

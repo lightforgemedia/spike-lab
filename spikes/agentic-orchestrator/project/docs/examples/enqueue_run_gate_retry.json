@@ -1,0 +1,51 @@
+{
+  "project_path": ".",
+  "intent": {
+    "goal": "Example: gate approval + retry"
+  },
+  "workflow": {
+    "name": "gate-retry-example",
+    "description": "Demonstrates needs_human + retries",
+    "nodes": [
+      {
+        "id": "precheck",
+        "type": "exec_block",
+        "exec": {
+          "executor": "local",
+          "workdir": ".",
+          "env": {},
+          "max_attempts": 2,
+          "commands": [
+            { "name": "maybe-fail", "argv": ["bash", "-c", "echo precheck; exit 1"], "allow_failure": false }
+          ],
+          "allow_shell": true
+        }
+      },
+      {
+        "id": "approval",
+        "type": "gate",
+        "config": {
+          "requires_approval": true,
+          "message": "Approve to continue"
+        }
+      },
+      {
+        "id": "post",
+        "type": "exec_block",
+        "exec": {
+          "executor": "local",
+          "workdir": ".",
+          "env": {},
+          "commands": [
+            { "name": "ok", "argv": ["bash", "-c", "echo post; exit 0"], "allow_failure": false }
+          ],
+          "allow_shell": true
+        }
+      }
+    ],
+    "edges": [
+      { "from": "precheck", "to": "approval" },
+      { "from": "approval", "to": "post" }
+    ]
+  }
+}

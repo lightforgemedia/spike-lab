@@ -1,0 +1,6 @@
+[toolchain]
+# Keep this pinned so CI and local dev match.
+# Update intentionally when bumping dependencies.
+channel = "1.92.0"
+profile = "minimal"
+components = ["clippy", "rustfmt"]
