@@ -70,7 +70,7 @@ impl OrchestratorService {
             "workflow_name": wf.name,
         });
 
-        let _: Vec<serde_json::Value> = self
+        let _: Option<serde_json::Value> = self
             .db
             .inner()
             .create(("intent", intent_ulid))
@@ -88,7 +88,7 @@ impl OrchestratorService {
             "owner_agent": null,
             "owner_lease_expires_at_ms": null,
         });
-        let _: Vec<serde_json::Value> = self
+        let _: Option<serde_json::Value> = self
             .db
             .inner()
             .create(("run", run_ulid))
@@ -363,7 +363,7 @@ impl OrchestratorService {
             "bundle_root": result.bundle_root,
             "created_at_ms": now_ms(),
         });
-        let _: Vec<serde_json::Value> = self
+        let _: Option<serde_json::Value> = self
             .db
             .inner()
             .create(("artifact", artifact_ulid))
@@ -456,7 +456,7 @@ impl OrchestratorService {
                 "status": "pending",
                 "created_at_ms": now_ms(),
             });
-            let _: Vec<serde_json::Value> = self
+            let _: Option<serde_json::Value> = self
                 .db
                 .inner()
                 .create(("stage_run", sr_ulid))
@@ -486,7 +486,7 @@ impl OrchestratorService {
         let q = r#"
             SELECT * FROM stage_run WHERE run_id = $run_id AND status = 'pending';
         "#;
-        let mut resp = self.db.inner().query(q).bind(("run_id", run_id)).await?;
+        let mut resp = self.db.inner().query(q).bind(("run_id", run_id.to_string())).await?;
         let stage_runs: Vec<serde_json::Value> = resp.take(0)?;
 
         for sr in stage_runs {
@@ -605,7 +605,7 @@ impl OrchestratorService {
             .db
             .inner()
             .query(q_check)
-            .bind(("sr", stage_run_id))
+            .bind(("sr", stage_run_id.to_string()))
             .await?;
         let rows: Vec<serde_json::Value> = resp.take(0)?;
         let c = rows
@@ -690,7 +690,7 @@ impl OrchestratorService {
             "status": "queued",
             "created_at_ms": now_ms(),
         });
-        let _: Vec<serde_json::Value> = self
+        let _: Option<serde_json::Value> = self
             .db
             .inner()
             .create(("job", job_ulid))
@@ -706,7 +706,12 @@ impl OrchestratorService {
             SELECT count() AS c FROM stage_run
             WHERE run_id = $run_id AND (status = 'failed' OR status = 'needs_human');
         "#;
-        let mut resp = self.db.inner().query(q_any_fail).bind(("run_id", run_id)).await?;
+        let mut resp = self
+            .db
+            .inner()
+            .query(q_any_fail)
+            .bind(("run_id", run_id.to_string()))
+            .await?;
         let rows: Vec<serde_json::Value> = resp.take(0)?;
         let fail_count = rows
             .get(0)
@@ -729,7 +734,12 @@ impl OrchestratorService {
             SELECT count() AS c FROM stage_run
             WHERE run_id = $run_id AND (status = 'pending' OR status = 'running');
         "#;
-        let mut resp = self.db.inner().query(q_remaining).bind(("run_id", run_id)).await?;
+        let mut resp = self
+            .db
+            .inner()
+            .query(q_remaining)
+            .bind(("run_id", run_id.to_string()))
+            .await?;
         let rows: Vec<serde_json::Value> = resp.take(0)?;
         let remaining = rows
             .get(0)
