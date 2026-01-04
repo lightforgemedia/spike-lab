@@ -4,6 +4,7 @@
   "type": "module",
   "main": "lib/index.ts",
   "scripts": {
-    "typecheck": "bun run --bun tsc --noEmit"
+    "typecheck": "bun run --bun tsc --noEmit",
+    "jules": "bun run lib/cli.ts"
   }
 }
