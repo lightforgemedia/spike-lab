@@ -2,6 +2,13 @@
 set -euo pipefail
 
 SPIKE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/spikes"
+CONFIG_FILE="$HOME/.spike-lab"
+JULES_API="https://jules.googleapis.com/v1alpha"
+
+# Load config if exists
+if [[ -f "$CONFIG_FILE" ]]; then
+    source "$CONFIG_FILE"
+fi
 
 usage() {
     cat <<EOF
@@ -13,12 +20,19 @@ USAGE:
     spike list                       List all spikes
     spike status <name>              Show spike status
 
-    JULES INTERACTION:
+    JULES CLI:
     spike check                      Check session status (stuck/working/done)
     spike watch                      Launch Jules TUI (monitor/assist sessions)
     spike sessions                   List all Jules sessions
     spike pull <session-id>          Pull session results
     spike teleport <session-id>      Checkout branch with Jules' changes
+
+    JULES API (programmatic):
+    spike api-setup                  Configure API key
+    spike api-sessions               List sessions via API
+    spike api-status <session-id>    Get detailed session status
+    spike api-message <id> <msg>     Send message to help stuck agent
+    spike api-approve <session-id>   Approve a session's plan
 
     spike help                       Show this help
 
@@ -27,6 +41,7 @@ EXAMPLES:
     spike jules graphql-perf "Profile and optimize N+1 queries"
     spike sessions                   # find session ID
     spike watch                      # interact with stuck session
+    spike api-message 123 "try using the v2 API instead"  # help stuck agent
     spike pull 123456                # grab results
 EOF
 }
@@ -248,6 +263,167 @@ cmd_teleport() {
     jules teleport "$session_id"
 }
 
+# ============ API Commands ============
+
+require_api_key() {
+    if [[ -z "${JULES_API_KEY:-}" ]]; then
+        echo "Error: JULES_API_KEY not set" >&2
+        echo "Run 'spike api-setup' to configure" >&2
+        exit 1
+    fi
+}
+
+api_call() {
+    local method="$1"
+    local endpoint="$2"
+    local data="${3:-}"
+
+    local args=(-s -X "$method" -H "x-goog-api-key: $JULES_API_KEY" -H "Content-Type: application/json")
+
+    if [[ -n "$data" ]]; then
+        args+=(-d "$data")
+    fi
+
+    curl "${args[@]}" "${JULES_API}${endpoint}"
+}
+
+cmd_api_setup() {
+    echo "Jules API Setup"
+    echo "==============="
+    echo ""
+    echo "1. Open: https://jules.google.com/settings#api"
+    echo "2. Generate or copy your API key"
+    echo ""
+    read -rp "Paste your API key: " api_key
+
+    if [[ -z "$api_key" ]]; then
+        echo "Error: No API key provided" >&2
+        exit 1
+    fi
+
+    # Test the key
+    echo "Testing API key..."
+    local response
+    response=$(curl -s -w "\n%{http_code}" -H "x-goog-api-key: $api_key" "${JULES_API}/sessions?pageSize=1")
+    local http_code
+    http_code=$(echo "$response" | tail -1)
+
+    if [[ "$http_code" != "200" ]]; then
+        echo "Error: API key validation failed (HTTP $http_code)" >&2
+        echo "$response" | head -5 >&2
+        exit 1
+    fi
+
+    # Save to config
+    echo "JULES_API_KEY=\"$api_key\"" > "$CONFIG_FILE"
+    chmod 600 "$CONFIG_FILE"
+
+    echo "API key saved to $CONFIG_FILE"
+    echo "You can now use spike api-* commands"
+}
+
+cmd_api_sessions() {
+    require_api_key
+
+    echo "=== Jules Sessions (API) ==="
+    local response
+    response=$(api_call GET "/sessions?pageSize=20")
+
+    # Pretty print with jq if available, otherwise raw
+    if command -v jq &>/dev/null; then
+        echo "$response" | jq -r '
+            .sessions[]? |
+            "\(.name | split("/") | last)\t\(.state // "unknown")\t\(.title // .prompt[:50])"
+        ' 2>/dev/null | column -t -s $'\t' || echo "$response"
+    else
+        echo "$response"
+    fi
+}
+
+cmd_api_status() {
+    require_api_key
+    local session_id="${1:-}"
+
+    if [[ -z "$session_id" ]]; then
+        echo "Error: session ID required" >&2
+        echo "Usage: spike api-status <session-id>" >&2
+        exit 1
+    fi
+
+    echo "=== Session $session_id ==="
+    local response
+    response=$(api_call GET "/sessions/$session_id")
+
+    if command -v jq &>/dev/null; then
+        echo "$response" | jq '.'
+    else
+        echo "$response"
+    fi
+
+    echo ""
+    echo "=== Activities ==="
+    local activities
+    activities=$(api_call GET "/sessions/$session_id/activities?pageSize=10")
+
+    if command -v jq &>/dev/null; then
+        echo "$activities" | jq -r '
+            .activities[]? |
+            "[\(.activityType // "unknown")] \(.content[:100] // .summary[:100] // "no content")"
+        ' 2>/dev/null || echo "$activities"
+    else
+        echo "$activities"
+    fi
+}
+
+cmd_api_message() {
+    require_api_key
+    local session_id="${1:-}"
+    local message="${2:-}"
+
+    if [[ -z "$session_id" ]] || [[ -z "$message" ]]; then
+        echo "Error: session ID and message required" >&2
+        echo "Usage: spike api-message <session-id> <message>" >&2
+        exit 1
+    fi
+
+    echo "Sending message to session $session_id..."
+    local response
+    response=$(api_call POST "/sessions/$session_id:sendMessage" "{\"prompt\": \"$message\"}")
+
+    if command -v jq &>/dev/null; then
+        echo "$response" | jq '.'
+    else
+        echo "$response"
+    fi
+
+    echo ""
+    echo "Message sent. Jules will process and respond."
+}
+
+cmd_api_approve() {
+    require_api_key
+    local session_id="${1:-}"
+
+    if [[ -z "$session_id" ]]; then
+        echo "Error: session ID required" >&2
+        echo "Usage: spike api-approve <session-id>" >&2
+        exit 1
+    fi
+
+    echo "Approving plan for session $session_id..."
+    local response
+    response=$(api_call POST "/sessions/$session_id:approvePlan" "{}")
+
+    if command -v jq &>/dev/null; then
+        echo "$response" | jq '.'
+    else
+        echo "$response"
+    fi
+
+    echo ""
+    echo "Plan approved. Jules will proceed with implementation."
+}
+
 # Main dispatch
 case "${1:-help}" in
     new)      shift; cmd_new "$@" ;;
@@ -259,6 +435,11 @@ case "${1:-help}" in
     sessions) cmd_sessions ;;
     pull)     shift; cmd_pull "$@" ;;
     teleport) shift; cmd_teleport "$@" ;;
+    api-setup)   cmd_api_setup ;;
+    api-sessions) cmd_api_sessions ;;
+    api-status)  shift; cmd_api_status "$@" ;;
+    api-message) shift; cmd_api_message "$@" ;;
+    api-approve) shift; cmd_api_approve "$@" ;;
     help|--help|-h) usage ;;
     *)
         echo "Unknown command: $1" >&2
