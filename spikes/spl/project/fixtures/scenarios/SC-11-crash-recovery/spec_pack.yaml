@@ -1,0 +1,21 @@
+task: "pt-11"
+intent: "crash recovery fixture"
+profile: "standard"
+scope:
+  in: ["code"]
+  out: []
+use_cases:
+  - id: "UC-1"
+    actor: "Owner"
+    preconditions: []
+    steps: ["worker crashes mid-run, later recovers"]
+    postconditions: ["task completes after retry"]
+behavior_contracts: []
+acceptance:
+  tests: ["true"]
+  manual: []
+policy:
+  network: "deny"
+  allow_domains: []
+gates:
+  required: ["pre_smoke","audit","adversarial_review","validate","post_smoke"]

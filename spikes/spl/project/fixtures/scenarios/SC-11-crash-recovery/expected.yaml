@@ -1,0 +1,6 @@
+scenario_id: "SC-11"
+vcs_modes: ["git","jj"]
+task:
+  expect_final_status: "done"
+messages:
+  ask_required: false

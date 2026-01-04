@@ -1,0 +1,21 @@
+task: "pt-1"
+intent: "Happy path fixture"
+profile: "standard"
+scope:
+  in: ["docs"]
+  out: []
+use_cases:
+  - id: "UC-1"
+    actor: "Owner"
+    preconditions: []
+    steps: ["do thing"]
+    postconditions: ["thing done"]
+behavior_contracts: []
+acceptance:
+  tests: ["true"]
+  manual: []
+policy:
+  network: "deny"
+  allow_domains: []
+gates:
+  required: ["pre_smoke","audit","adversarial_review","validate","post_smoke"]

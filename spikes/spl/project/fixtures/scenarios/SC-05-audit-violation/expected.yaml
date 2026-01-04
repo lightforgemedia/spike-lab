@@ -1,0 +1,6 @@
+scenario_id: "SC-05"
+vcs_modes: ["git","jj"]
+task:
+  expect_final_status: "blocked_failure"
+messages:
+  ask_required: false

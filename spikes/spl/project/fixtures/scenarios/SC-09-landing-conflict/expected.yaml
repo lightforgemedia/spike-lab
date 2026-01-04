@@ -1,0 +1,6 @@
+scenario_id: "SC-09"
+vcs_modes: ["git","jj"]
+task:
+  expect_final_status: "blocked_hitl"
+messages:
+  ask_required: true

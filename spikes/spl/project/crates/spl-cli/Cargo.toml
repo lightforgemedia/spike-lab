@@ -1,0 +1,17 @@
+[package]
+name = "spl-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+spl-runner = { path = "../spl-runner" }
+spl-core = { path = "../spl-core" }
+spl-spec = { path = "../spl-spec" }
+spl-storage = { path = "../spl-storage" }
+spl-storage-sqlite = { path = "../spl-storage-sqlite" }

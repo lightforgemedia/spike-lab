@@ -1,0 +1,14 @@
+[package]
+name = "spl-vcs-git"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+uuid.workspace = true
+anyhow.workspace = true
+spl-core = { path = "../spl-core" }
+spl-vcs = { path = "../spl-vcs" }
+
+[dev-dependencies]
+tempfile.workspace = true

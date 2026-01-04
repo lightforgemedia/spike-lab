@@ -1,0 +1,38 @@
+# SPL workspace helper commands (optional)
+# Install: brew install just
+
+set shell := ["bash", "-lc"]
+
+default:
+  @just --list
+
+fmt:
+  cargo fmt
+
+clippy:
+  cargo clippy --all-targets --all-features -- -D warnings
+
+test:
+  cargo test
+
+# Fast: scenario harness tests (fixture-based, no VCS tools required)
+test-scenarios:
+  cargo test -p spl-runner scenario_
+
+# VCS adapter contract tests (git required, jj optional)
+test-vcs:
+  cargo test -p spl-vcs-git git_adapter_contract
+  cargo test -p spl-vcs-jj jj_adapter_contract_if_available
+
+# CLI helpers (run from repo root)
+init:
+  cargo run -p spl-cli -- init
+
+doctor:
+  cargo run -p spl-cli -- doctor
+
+status:
+  cargo run -p spl-cli -- status
+
+watch:
+  cargo run -p spl-cli -- status --watch

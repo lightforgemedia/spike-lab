@@ -1,0 +1,12 @@
+[package]
+name = "spl-vcs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+spl-core = { path = "../spl-core" }
+
+[dev-dependencies]
+tempfile.workspace = true

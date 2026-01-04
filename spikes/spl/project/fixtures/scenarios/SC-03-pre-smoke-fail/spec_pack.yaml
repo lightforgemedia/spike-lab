@@ -1,0 +1,21 @@
+task: "pt-3"
+intent: "pre_smoke failure fixture"
+profile: "standard"
+scope:
+  in: ["code"]
+  out: []
+use_cases:
+  - id: "UC-1"
+    actor: "Owner"
+    preconditions: []
+    steps: ["run smoke"]
+    postconditions: ["smoke passes"]
+behavior_contracts: []
+acceptance:
+  tests: ["true"]
+  manual: []
+policy:
+  network: "deny"
+  allow_domains: []
+gates:
+  required: ["pre_smoke","audit","adversarial_review","validate","post_smoke"]

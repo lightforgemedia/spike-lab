@@ -1,0 +1,5 @@
+/target
+**/*.rs.bk
+
+# SPL artifacts (if you test inside this repo)
+/.spl

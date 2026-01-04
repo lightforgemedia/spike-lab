@@ -1,0 +1,21 @@
+task: "pt-5"
+intent: "audit violation fixture"
+profile: "standard"
+scope:
+  in: ["code"]
+  out: []
+use_cases:
+  - id: "UC-1"
+    actor: "Owner"
+    preconditions: []
+    steps: ["delegate tries forbidden VCS operation"]
+    postconditions: ["audit blocks"]
+behavior_contracts: []
+acceptance:
+  tests: ["true"]
+  manual: []
+policy:
+  network: "deny"
+  allow_domains: []
+gates:
+  required: ["pre_smoke","audit","adversarial_review","validate","post_smoke"]
