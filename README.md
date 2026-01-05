@@ -61,6 +61,26 @@ bun run lib/cli.ts plan <id>             # View plan steps
 bun run lib/cli.ts bash <id>             # View bash commands run
 ```
 
+## SPL + Jules Integration
+
+Use Jules as the delegate gate for SPL spec packs:
+
+```bash
+# Run spec pack through Jules delegate
+bun run lib/cli.ts spl-delegate ./spec.yaml --source owner/repo
+
+# Or with explicit options
+bun run lib/cli.ts spl-delegate spec.yaml --source owner/repo --branch main --dir ./project
+```
+
+This workflow:
+1. Sends spec pack to Jules with constraints (scope, behavior contracts)
+2. Waits for Jules to generate code changes
+3. Extracts and applies the patch
+4. Returns control to SPL for audit/validate/land gates
+
+See `spikes/spl/project/examples/spec-packs/` for example spec packs.
+
 ## Project Structure
 
 ```
@@ -70,6 +90,7 @@ spike-lab/
 │   ├── client.ts          # JulesClient
 │   ├── types.ts           # API types
 │   ├── errors.ts          # Error classes
+│   ├── spl-jules.ts       # SPL integration
 │   ├── cli.ts             # CLI wrapper
 │   └── index.ts           # Exports
 ├── spikes/                # Research spikes
