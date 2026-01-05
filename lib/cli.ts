@@ -11,6 +11,7 @@
  */
 
 import { JulesClient, JulesError } from './index'
+import { runSplWithJulesDelegate, type SplProject } from './spl-jules'
 
 // Load API key from ~/.spike-lab
 async function loadApiKey(): Promise<string> {
@@ -50,10 +51,19 @@ Commands:
   plan <session-id>           Get current plan steps
   bash <session-id>           List bash command outputs
 
+Test Generation (Pit of Success):
+  add-tests <project-path>    Profile project and create test session
+                              Options: --source, --branch, --coverage core:80,daemon:70
+
+SPL Integration:
+  spl-delegate <spec.yaml>    Run spec pack through Jules delegate gate
+                              Options: --source, --branch, --dir
+
 Examples:
   bun run lib/cli.ts sessions
   bun run lib/cli.ts message 123456 "Try using the v2 API"
   bun run lib/cli.ts patch 123456 > fix.patch && git apply fix.patch
+  bun run lib/cli.ts add-tests ./spikes/my-project/project --coverage core:80
 `)
     process.exit(0)
   }
@@ -320,6 +330,246 @@ Examples:
             const status = out.exitCode === 0 ? '✓' : out.exitCode === null ? '?' : `✗(${out.exitCode})`
             const cmd = out.command.length > 80 ? out.command.slice(0, 77) + '...' : out.command
             console.log(`  ${status} ${cmd}`)
+          }
+        }
+        break
+      }
+
+      case 'add-tests': {
+        // Usage: add-tests <project-path> [--source X] [--branch Y]
+        const { profileRustProject, generateTestPromptContext, generateTaskList } = await import('./project-profiler')
+
+        let projectPath = ''
+        let source = ''
+        let branch = 'main'
+        const coverageTargets: Record<string, number> = {}
+
+        for (let i = 0; i < args.length; i++) {
+          const arg = args[i] ?? ''
+          if (arg === '--source' && args[i + 1]) {
+            source = args[++i] ?? ''
+          } else if (arg === '--branch' && args[i + 1]) {
+            branch = args[++i] ?? ''
+          } else if (arg === '--coverage' && args[i + 1]) {
+            // Format: --coverage core:80,daemon:70
+            const pairs = (args[++i] ?? '').split(',')
+            for (const pair of pairs) {
+              const [crate, pct] = pair.split(':')
+              if (crate && pct) {
+                coverageTargets[crate] = parseInt(pct, 10)
+              }
+            }
+          } else if (!arg.startsWith('--')) {
+            projectPath = arg
+          }
+        }
+
+        if (!projectPath) {
+          console.error('Usage: add-tests <project-path> [--source owner/repo] [--branch main] [--coverage core:80,daemon:70]')
+          process.exit(1)
+        }
+
+        // Profile the project
+        console.log('📊 Profiling project...')
+        const profile = await profileRustProject(projectPath)
+
+        // Set default coverage targets if not specified
+        for (const crate of profile.crates) {
+          if (!coverageTargets[crate]) {
+            coverageTargets[crate] = crate === 'core' ? 80 : 70
+          }
+        }
+
+        // Detect source from git if not specified
+        if (!source) {
+          const { $ } = await import('bun')
+          const remote = await $`git remote get-url origin`.quiet().nothrow()
+          if (remote.exitCode === 0) {
+            const url = remote.stdout.toString().trim()
+            const match = url.match(/github\.com[:/]([^/]+\/[^/.]+)/)
+            if (match?.[1]) {
+              source = `sources/github/${match[1].replace('.git', '')}`
+            }
+          }
+        }
+
+        if (!source) {
+          console.error('Error: Could not detect GitHub source. Use --source owner/repo')
+          process.exit(1)
+        }
+        if (!source.startsWith('sources/')) {
+          source = `sources/github/${source}`
+        }
+
+        // Generate the prompt
+        const contextSection = generateTestPromptContext(profile)
+        const tasksSection = generateTaskList(profile, coverageTargets)
+
+        const prompt = `# Add Comprehensive Tests
+
+${contextSection}
+
+## Tasks
+${tasksSection}
+
+## CRITICAL: Failure Protocol
+
+**STOP after 3 consecutive test failures.** Do not continue making changes.
+Instead:
+1. Report the exact error message
+2. Explain what you were trying to do
+3. Wait for guidance
+
+## Test Structure (FOLLOW EXACTLY)
+
+Create integration tests in \`crates/{crate}/tests/\` directory:
+- Do NOT add \`mod tests;\` to lib.rs for integration tests
+- Import crate as external: \`use crate_name::*;\`
+- Run \`cargo test -p {crate}\` after each change
+
+## Deliverables
+
+- [ ] Each crate has tests in crates/{crate}/tests/
+- [ ] All tests pass: cargo test exits 0
+- [ ] tarpaulin.toml created for coverage
+
+Do NOT modify production code.`
+
+        console.log('\n📋 Generated prompt:')
+        console.log('─'.repeat(60))
+        console.log(prompt.slice(0, 500) + '...')
+        console.log('─'.repeat(60))
+
+        console.log('\n🚀 Creating Jules session...')
+        const session = await client.createSession({
+          prompt,
+          title: `[Tests] Add tests to ${profile.crates.join(', ')}`,
+          sourceContext: {
+            source,
+            githubRepoContext: { startingBranch: branch },
+          },
+        })
+
+        console.log(`\n✅ Session created:`)
+        console.log(`   ID: ${session.id}`)
+        console.log(`   URL: ${session.url}`)
+        console.log(`   State: ${session.state}`)
+
+        // Archive the session
+        const archivePath = `${process.cwd()}/jules/sessions/${session.id}.json`
+        const archive = {
+          sessionId: session.id,
+          url: session.url,
+          title: session.title,
+          source,
+          branch,
+          createdAt: new Date().toISOString(),
+          status: 'created',
+          template: 'add-tests-v2',
+          profile: {
+            crates: profile.crates,
+            existingTests: profile.existingTests.length,
+            warnings: profile.warnings,
+          },
+          coverageTargets,
+        }
+
+        await Bun.write(archivePath, JSON.stringify(archive, null, 2))
+        console.log(`   Archive: ${archivePath}`)
+        break
+      }
+
+      case 'spl-delegate': {
+        // Parse args: spl-delegate <spec.yaml> [--source X] [--branch Y] [--dir Z]
+        let specPath = ''
+        let source = ''
+        let branch = ''
+        let workDir = process.cwd()
+
+        for (let i = 0; i < args.length; i++) {
+          const arg = args[i] ?? ''
+          if (arg === '--source' && args[i + 1]) {
+            source = args[++i] ?? ''
+          } else if (arg === '--branch' && args[i + 1]) {
+            branch = args[++i] ?? ''
+          } else if (arg === '--dir' && args[i + 1]) {
+            workDir = args[++i] ?? process.cwd()
+          } else if (!arg.startsWith('--')) {
+            specPath = arg
+          }
+        }
+
+        if (!specPath) {
+          console.error('Usage: spl-delegate <spec.yaml> [--source owner/repo] [--branch main] [--dir .]')
+          console.error('\nExample:')
+          console.error('  bun run lib/cli.ts spl-delegate ./spec.yaml --source owner/repo --dir ./project')
+          process.exit(1)
+        }
+
+        // Try to detect source from git remote if not specified
+        if (!source) {
+          const { $ } = await import('bun')
+          const remote = await $`git remote get-url origin`.cwd(workDir).quiet().nothrow()
+          if (remote.exitCode === 0) {
+            const url = remote.stdout.toString().trim()
+            // Parse github.com:owner/repo or https://github.com/owner/repo
+            const match = url.match(/github\.com[:/]([^/]+\/[^/.]+)/)
+            if (match?.[1]) {
+              source = `sources/github/${match[1].replace('.git', '')}`
+              console.log(`Detected source: ${source}`)
+            }
+          }
+        }
+
+        if (!source) {
+          console.error('Error: Could not detect GitHub source. Use --source owner/repo')
+          process.exit(1)
+        }
+
+        // Normalize source format
+        if (!source.startsWith('sources/')) {
+          source = `sources/github/${source}`
+        }
+
+        const project: SplProject = {
+          repoRoot: workDir,
+          source,
+        }
+        if (branch) {
+          project.branch = branch
+        }
+
+        console.log(`\n🔧 SPL + Jules Delegate`)
+        console.log(`   Spec: ${specPath}`)
+        console.log(`   Source: ${source}`)
+        console.log(`   Dir: ${workDir}\n`)
+
+        const result = await runSplWithJulesDelegate(project, specPath, {
+          apiKey,
+          timeout: 600000,
+          onProgress: (state, msg) => {
+            console.log(`   [${state}] ${msg ?? ''}`)
+          },
+        })
+
+        console.log(`\n📋 Results:`)
+        console.log(`   Session: ${result.delegateResult.sessionId}`)
+        console.log(`   URL: ${result.delegateResult.sessionUrl}`)
+
+        if (result.delegateResult.applied) {
+          console.log(`   ✓ Patch applied successfully`)
+        } else if (result.delegateResult.patchFile) {
+          console.log(`   ⚠ Patch extracted but not applied: ${result.delegateResult.patchFile}`)
+        }
+
+        if (result.delegateResult.error) {
+          console.error(`   ✗ Error: ${result.delegateResult.error}`)
+        }
+
+        if (result.nextSteps.length > 0) {
+          console.log(`\n📌 Next steps:`)
+          for (const step of result.nextSteps) {
+            console.log(`   • ${step}`)
           }
         }
         break

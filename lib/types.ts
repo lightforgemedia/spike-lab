@@ -39,13 +39,10 @@ export interface Source {
 export interface SourceContext {
   /** Source resource name */
   source: string
-  /** Optional branch */
-  branch?: string
-  /** GitHub-specific context */
+  /** GitHub-specific context (required for create) */
   githubRepoContext?: {
-    owner: string
-    repo: string
-    branch?: string
+    /** Starting branch for the session */
+    startingBranch?: string
   }
 }
 
@@ -173,8 +170,6 @@ export interface CreateSessionRequest {
   title?: string
   /** Automation mode */
   automationMode?: AutomationMode
-  /** Require explicit plan approval */
-  requirePlanApproval?: boolean
 }
 
 export interface SendMessageRequest {

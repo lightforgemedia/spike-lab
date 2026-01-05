@@ -66,3 +66,13 @@ export {
   NotFoundError,
   RateLimitError,
 } from './errors'
+
+// SPL Integration
+export {
+  delegateViaJules,
+  runSplWithJulesDelegate,
+  buildPromptFromSpecPack,
+  type SplProject,
+  type DelegateResult,
+  type DelegateOptions,
+} from './spl-jules'

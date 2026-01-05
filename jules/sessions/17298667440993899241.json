@@ -1,0 +1,27 @@
+{
+  "sessionId": "17298667440993899241",
+  "url": "https://jules.google.com/session/17298667440993899241",
+  "title": "[Tests] Add tests to core, agent, daemon",
+  "source": "sources/github/lightforgemedia/spike-lab",
+  "branch": "main",
+  "createdAt": "2026-01-05T15:33:01.241Z",
+  "status": "created",
+  "template": "add-tests-v2",
+  "profile": {
+    "crates": [
+      "core",
+      "agent",
+      "daemon"
+    ],
+    "existingTests": 1,
+    "warnings": [
+      "SurrealDB detected: enums may need #[serde(tag = \"type\")]",
+      "Tokio detected: async tests need #[tokio::test]"
+    ]
+  },
+  "coverageTargets": {
+    "core": 80,
+    "daemon": 70,
+    "agent": 70
+  }
+}
