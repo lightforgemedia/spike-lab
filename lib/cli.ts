@@ -55,6 +55,11 @@ Test Generation (Pit of Success):
   add-tests <project-path>    Profile project and create test session
                               Options: --source, --branch, --coverage core:80,daemon:70
 
+Monitoring:
+  monitor <session-id>        Start smart monitor (exits on complete/stuck)
+                              Options: --output <file>, --stuck <n>
+  check <session-id>          Quick status check (single poll)
+
 SPL Integration:
   spl-delegate <spec.yaml>    Run spec pack through Jules delegate gate
                               Options: --source, --branch, --dir
@@ -332,6 +337,64 @@ Examples:
             console.log(`  ${status} ${cmd}`)
           }
         }
+        break
+      }
+
+      case 'monitor': {
+        const sessionId = args[0]
+        if (!sessionId) {
+          console.error('Usage: monitor <session-id> [--output file] [--stuck n]')
+          process.exit(1)
+        }
+
+        // Spawn the monitor as a separate process
+        const monitorArgs = ['run', 'lib/session-monitor.ts', sessionId, ...args.slice(1)]
+        const proc = Bun.spawn(['bun', ...monitorArgs], {
+          stdout: 'inherit',
+          stderr: 'inherit',
+        })
+        const exitCode = await proc.exited
+        process.exit(exitCode)
+      }
+
+      case 'check': {
+        // Quick single-poll status check with stuck detection
+        const sessionId = args[0]
+        if (!sessionId) {
+          console.error('Usage: check <session-id>')
+          process.exit(1)
+        }
+
+        const session = await client.getSession(sessionId)
+        const outputs = await client.extractBashOutputs(sessionId)
+
+        // Analyze for stuck pattern
+        const recentOutputs = outputs.slice(-10)
+        const failCount = recentOutputs.filter(o => o.exitCode === 101).length
+        const isStuck = failCount >= 5
+
+        console.log(`Session: ${session.id}`)
+        console.log(`State: ${session.state}`)
+        console.log(`Bash commands: ${outputs.length}`)
+        console.log(`Recent failures: ${failCount}/10`)
+        console.log(`Status: ${session.state === 'COMPLETED' ? '✅ DONE' : isStuck ? '🚨 STUCK' : '⏳ RUNNING'}`)
+
+        if (isStuck) {
+          console.log(`\nRecommendation: Send guidance with 'message' command`)
+        }
+
+        // Write to known location for external tools
+        const statusFile = `/tmp/jules-${sessionId}.json`
+        await Bun.write(statusFile, JSON.stringify({
+          sessionId,
+          state: session.state,
+          bashCommands: outputs.length,
+          recentFailures: failCount,
+          isStuck,
+          isCompleted: session.state === 'COMPLETED',
+          checkedAt: new Date().toISOString(),
+        }, null, 2))
+        console.log(`\nStatus written to: ${statusFile}`)
         break
       }
 
