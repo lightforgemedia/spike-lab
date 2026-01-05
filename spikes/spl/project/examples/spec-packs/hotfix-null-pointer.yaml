@@ -1,0 +1,73 @@
+# Example: Production Hotfix
+# Profile: hotfix (reduced gates for urgent fixes)
+#
+# This example shows how to specify an urgent production fix
+# with relaxed gate requirements while maintaining safety.
+
+task: "HOTFIX-42"
+intent: "Fix null pointer crash when user has no default payment method"
+
+scope:
+  in:
+    - "src/billing/checkout.rs"
+  out:
+    - "src/billing/subscriptions.rs"  # Must not touch subscriptions
+    - "migrations/"                    # No schema changes in hotfix
+
+use_cases:
+  - id: "UC-1"
+    actor: "Customer"
+    preconditions:
+      - "User has active cart"
+      - "User has NO saved payment methods"
+    steps:
+      - "User clicks 'Proceed to Checkout'"
+      - "System shows payment method selection (empty list)"
+      - "User adds new payment method inline"
+      - "Checkout completes"
+    postconditions:
+      - "No crash occurs"
+      - "User is prompted to add payment method"
+      - "Checkout succeeds with new payment method"
+
+  - id: "UC-2"
+    actor: "Customer"
+    preconditions:
+      - "User has saved payment methods"
+    steps:
+      - "User clicks 'Proceed to Checkout'"
+      - "Default payment method is pre-selected"
+    postconditions:
+      - "Existing behavior unchanged"
+
+behavior_contracts:
+  - id: "BC-1"
+    anchor: "rust://crate::billing::checkout::get_default_payment#fn(user_id: UserId) -> Option<PaymentMethod>"
+    examples:
+      - input: { user_id: "user_with_payments" }
+        output: { some: { id: "pm_123", last4: "4242" } }
+      - input: { user_id: "user_without_payments" }
+        output: { none: null }
+    invariants:
+      - "Must return None, never panic, when user has no payment methods"
+      - "Must not assume default_payment_id is always set"
+
+acceptance:
+  tests:
+    - "cargo test checkout::no_payment_methods"
+    - "cargo test checkout::with_payment_methods"
+  manual: []
+
+profile: "hotfix"
+
+policy:
+  network: "deny"
+  allow_domains: []
+
+# Hotfix profile relaxes gates: no adversarial_review required
+gates:
+  required:
+    - pre_smoke
+    - audit
+    - validate
+    - post_smoke

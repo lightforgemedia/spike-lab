@@ -1,0 +1,53 @@
+# Example: Documentation Update
+# Profile: docs (minimal gates, read-only network allowed)
+#
+# This example shows how to specify documentation tasks
+# with relaxed requirements appropriate for non-code changes.
+
+task: "DOCS-15"
+intent: "Update API reference docs for v2.0 endpoint changes"
+
+scope:
+  in:
+    - "docs/api/"
+    - "README.md"
+  out:
+    - "src/"        # No code changes
+    - "tests/"      # No test changes
+    - "migrations/" # No schema changes
+
+use_cases:
+  - id: "UC-1"
+    actor: "Developer"
+    preconditions:
+      - "Developer is reading API docs"
+    steps:
+      - "Developer navigates to /api/v2/users docs"
+      - "Sees updated request/response examples"
+      - "Sees deprecation notice for v1 endpoints"
+    postconditions:
+      - "Examples match actual API behavior"
+      - "Breaking changes clearly documented"
+
+behavior_contracts: []  # No code contracts for docs
+
+acceptance:
+  tests:
+    - "just docs-lint"          # Markdown linting
+    - "just docs-link-check"    # Verify internal links
+  manual:
+    - "Review rendered docs in staging"
+
+profile: "docs"
+
+policy:
+  network: "allow_readonly"  # Allow fetching external references
+  allow_domains:
+    - "api.example.com"      # To verify endpoint examples
+
+# Docs profile: skip adversarial_review and validate
+gates:
+  required:
+    - pre_smoke
+    - audit
+    - post_smoke

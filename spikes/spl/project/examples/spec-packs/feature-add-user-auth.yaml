@@ -1,0 +1,91 @@
+# Example: Feature Implementation with Behavior Contracts
+# Profile: standard (full gates required)
+#
+# This example shows how to specify a new feature that adds
+# user authentication to an API endpoint.
+
+task: "PT-101"
+intent: "Add JWT-based authentication to the /api/users endpoint"
+
+scope:
+  in:
+    - "src/api/users.rs"
+    - "src/auth/"
+    - "src/middleware/"
+  out:
+    - "tests/"
+    - "docs/"
+    - "scripts/"
+
+use_cases:
+  - id: "UC-1"
+    actor: "API Client"
+    preconditions:
+      - "Client has valid JWT token"
+      - "Token contains user_id claim"
+    steps:
+      - "Client sends GET /api/users with Authorization header"
+      - "Middleware extracts and validates JWT"
+      - "Handler retrieves users visible to authenticated user"
+      - "Response returns user list with 200 OK"
+    postconditions:
+      - "Response contains only users in same org as requester"
+      - "Request logged with user_id"
+
+  - id: "UC-2"
+    actor: "API Client"
+    preconditions:
+      - "Client has no token or invalid token"
+    steps:
+      - "Client sends GET /api/users without valid Authorization"
+      - "Middleware rejects request"
+    postconditions:
+      - "Response is 401 Unauthorized"
+      - "No user data exposed"
+
+behavior_contracts:
+  - id: "BC-1"
+    anchor: "rust://crate::auth::jwt::validate_token#fn(token: &str) -> Result<Claims, AuthError>"
+    examples:
+      - input: { token: "valid.jwt.token" }
+        output: { ok: { user_id: "u123", org_id: "org456" } }
+      - input: { token: "expired.jwt.token" }
+        output: { err: "TokenExpired" }
+      - input: { token: "malformed" }
+        output: { err: "InvalidToken" }
+    invariants:
+      - "Must verify signature before trusting claims"
+      - "Must check exp claim for expiration"
+      - "Must return stable error types (no internal details)"
+
+  - id: "BC-2"
+    anchor: "rust://crate::middleware::auth::require_auth#fn(req: Request) -> Result<AuthenticatedRequest, Response>"
+    examples:
+      - input: { headers: { authorization: "Bearer valid.token" } }
+        output: { ok: { user_id: "u123" } }
+      - input: { headers: {} }
+        output: { err: { status: 401 } }
+    invariants:
+      - "Must extract token from Bearer scheme only"
+      - "Must call validate_token for all tokens"
+
+acceptance:
+  tests:
+    - "cargo test --package api -- auth"
+    - "cargo test --package api -- users::authenticated"
+  manual:
+    - "Verify Swagger docs show auth requirement"
+
+profile: "standard"
+
+policy:
+  network: "deny"
+  allow_domains: []
+
+gates:
+  required:
+    - pre_smoke
+    - audit
+    - adversarial_review
+    - validate
+    - post_smoke

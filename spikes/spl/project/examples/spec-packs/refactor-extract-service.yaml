@@ -1,0 +1,91 @@
+# Example: Refactoring Task
+# Profile: standard (behavior must not change)
+#
+# This example shows how to specify a refactoring task that
+# extracts shared logic into a service without changing behavior.
+
+task: "REFACTOR-88"
+intent: "Extract notification logic from handlers into NotificationService"
+
+scope:
+  in:
+    - "src/handlers/orders.rs"
+    - "src/handlers/users.rs"
+    - "src/handlers/payments.rs"
+    - "src/services/"
+  out:
+    - "src/api/"      # API contracts must not change
+    - "migrations/"   # No schema changes
+
+use_cases:
+  - id: "UC-1"
+    actor: "System"
+    preconditions:
+      - "Order placed successfully"
+    steps:
+      - "Handler calls NotificationService.send_order_confirmation()"
+      - "Service sends email via configured provider"
+    postconditions:
+      - "Same email sent as before refactor"
+      - "Notification logged to audit trail"
+
+  - id: "UC-2"
+    actor: "Developer"
+    preconditions:
+      - "Need to send notification from new handler"
+    steps:
+      - "Import NotificationService"
+      - "Call appropriate method with typed params"
+    postconditions:
+      - "Compile-time type safety on notification params"
+      - "No need to duplicate email template logic"
+
+behavior_contracts:
+  - id: "BC-1"
+    anchor: "rust://crate::services::notification::NotificationService::send#fn(&self, notification: Notification) -> Result<(), NotifyError>"
+    examples:
+      - input:
+          notification:
+            kind: "order_confirmation"
+            to: "user@example.com"
+            data: { order_id: "ord_123" }
+        output: { ok: null }
+      - input:
+          notification:
+            kind: "order_confirmation"
+            to: "invalid-email"
+            data: { order_id: "ord_123" }
+        output: { err: "InvalidRecipient" }
+    invariants:
+      - "Must validate email format before sending"
+      - "Must be idempotent for same notification_id"
+      - "Must log all send attempts"
+
+  - id: "BC-2"
+    anchor: "rust://crate::handlers::orders::create_order#existing"
+    examples: []
+    invariants:
+      - "External behavior MUST NOT change"
+      - "Same notifications sent for same inputs"
+      - "Response format unchanged"
+
+acceptance:
+  tests:
+    - "cargo test --package handlers"
+    - "cargo test --package services -- notification"
+    - "cargo test --test integration"
+  manual: []
+
+profile: "standard"
+
+policy:
+  network: "deny"
+  allow_domains: []
+
+gates:
+  required:
+    - pre_smoke
+    - audit
+    - adversarial_review   # Important for refactoring
+    - validate
+    - post_smoke

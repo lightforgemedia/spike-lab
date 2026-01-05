@@ -1,0 +1,101 @@
+# Example: External API Integration
+# Profile: standard with network policy DECISION required
+#
+# This example shows how to specify a task that requires
+# network access to external APIs, requiring explicit approval.
+
+task: "INT-203"
+intent: "Integrate Stripe webhooks for payment event processing"
+
+scope:
+  in:
+    - "src/webhooks/stripe.rs"
+    - "src/billing/"
+    - "src/events/"
+  out:
+    - "src/auth/"     # No auth changes
+    - "migrations/"   # Stripe uses existing schema
+
+use_cases:
+  - id: "UC-1"
+    actor: "Stripe"
+    preconditions:
+      - "Webhook endpoint registered in Stripe dashboard"
+      - "Signing secret configured"
+    steps:
+      - "Stripe sends POST /webhooks/stripe with payment_intent.succeeded"
+      - "Handler verifies webhook signature"
+      - "Handler extracts payment details"
+      - "Handler updates order status to 'paid'"
+      - "Handler emits OrderPaid event"
+    postconditions:
+      - "Order marked as paid in database"
+      - "Customer receives confirmation email"
+      - "Event logged for audit"
+
+  - id: "UC-2"
+    actor: "Stripe"
+    preconditions:
+      - "Invalid webhook signature"
+    steps:
+      - "Stripe sends webhook with tampered signature"
+      - "Handler rejects with 400"
+    postconditions:
+      - "No order state changes"
+      - "Suspicious request logged"
+
+behavior_contracts:
+  - id: "BC-1"
+    anchor: "rust://crate::webhooks::stripe::verify_signature#fn(payload: &[u8], sig: &str, secret: &str) -> Result<(), WebhookError>"
+    examples:
+      - input:
+          payload: "test_payload"
+          sig: "valid_signature"
+          secret: "whsec_test"
+        output: { ok: null }
+      - input:
+          payload: "test_payload"
+          sig: "invalid_signature"
+          secret: "whsec_test"
+        output: { err: "InvalidSignature" }
+    invariants:
+      - "Must use constant-time comparison"
+      - "Must validate timestamp to prevent replay attacks"
+
+  - id: "BC-2"
+    anchor: "rust://crate::webhooks::stripe::handle_payment_intent_succeeded#fn(event: StripeEvent) -> Result<(), ProcessError>"
+    examples:
+      - input:
+          event:
+            type: "payment_intent.succeeded"
+            data: { object: { id: "pi_123", amount: 5000 } }
+        output: { ok: null }
+    invariants:
+      - "Must be idempotent (same event ID processed once)"
+      - "Must update order atomically"
+      - "Must emit domain event after commit"
+
+acceptance:
+  tests:
+    - "cargo test webhooks::stripe"
+    - "cargo test --test stripe_integration"  # Uses Stripe test mode
+  manual:
+    - "Verify webhook in Stripe dashboard shows successful delivery"
+
+profile: "standard"
+
+# Network access required for Stripe API calls and test mode
+# DECISION will be required before this task can proceed
+policy:
+  network: "allow"
+  allow_domains:
+    - "api.stripe.com"
+    - "dashboard.stripe.com"
+
+gates:
+  required:
+    - pre_smoke
+    - audit
+    - adversarial_review
+    - validate
+    - post_smoke
