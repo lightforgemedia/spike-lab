@@ -172,6 +172,15 @@ impl VcsAdapter for JjAdapter {
         let git = self.git_lander();
         let landed = git.apply_patch_to_repo_root(repo_root, patch, message)?;
         Self::best_effort_jj_git_import(repo_root);
+        // After git land + jj import, ffwd the jj bookmark to match git remote.
+        Self::run(repo_root, &[
+            "jj",
+            "bookmark",
+            "set",
+            &self.main_bookmark,
+            "-r",
+            &self.git_main_branch,
+        ])?;
         Ok(landed)
     }
 

@@ -9,3 +9,6 @@ anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 spl-core = { path = "../spl-core" }
+
+[dev-dependencies]
+tempfile.workspace = true

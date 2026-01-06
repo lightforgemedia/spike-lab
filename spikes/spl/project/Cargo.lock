@@ -657,6 +657,7 @@ dependencies = [
  "serde",
  "serde_json",
  "spl-core",
+ "tempfile",
 ]
 
 [[package]]
@@ -699,6 +700,7 @@ dependencies = [
  "serde",
  "serde_json",
  "spl-core",
+ "tempfile",
 ]
 
 [[package]]
@@ -762,6 +764,7 @@ dependencies = [
  "serde_json",
  "spl-core",
  "spl-storage",
+ "tempfile",
 ]
 
 [[package]]
