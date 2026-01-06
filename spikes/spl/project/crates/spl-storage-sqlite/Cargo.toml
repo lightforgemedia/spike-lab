@@ -12,4 +12,4 @@ spl-core = { path = "../spl-core" }
 spl-storage = { path = "../spl-storage" }
 
 [dev-dependencies]
-tempfile.workspace = true
+tempfile = { workspace = true }
