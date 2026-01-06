@@ -31,3 +31,33 @@ impl Rule for MeaningChangeExportedRule {
         vec![]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{ValidateInput, ValidationCategory};
+
+    #[test]
+    fn test_meaning_change_exported_rule_no_change() {
+        let rule = MeaningChangeExportedRule;
+        let input = ValidateInput {
+            exported_signature_changed: false,
+            details: vec![],
+        };
+        let findings = rule.eval(&input);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn test_meaning_change_exported_rule_with_change() {
+        let rule = MeaningChangeExportedRule;
+        let input = ValidateInput {
+            exported_signature_changed: true,
+            details: vec![],
+        };
+        let findings = rule.eval(&input);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule_id, "meaning_change_exported");
+        assert_eq!(findings[0].severity, crate::types::Severity::Fail);
+    }
+}
