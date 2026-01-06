@@ -232,3 +232,50 @@ impl Runner {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_init_repo() {
+        let dir = tempdir().unwrap();
+        let repo_root = dir.path().to_path_buf();
+        Runner::init_repo(&repo_root).unwrap();
+        assert!(repo_root.join(".spl").join("reviews").exists());
+        assert!(Config::config_path(&repo_root).exists());
+        assert!(Config::db_path(&repo_root).exists());
+    }
+
+    #[test]
+    fn test_open() {
+        let dir = tempdir().unwrap();
+        let repo_root = dir.path().to_path_buf();
+        Runner::init_repo(&repo_root).unwrap();
+        let runner = Runner::open(repo_root.clone()).unwrap();
+        assert_eq!(runner.cfg.project.id, repo_root.file_name().unwrap().to_str().unwrap());
+    }
+
+    #[test]
+    fn test_enqueue_execute() {
+        let dir = tempdir().unwrap();
+        let repo_root = dir.path().to_path_buf();
+        Runner::init_repo(&repo_root).unwrap();
+        let runner = Runner::open(repo_root).unwrap();
+        let task = spl_core::Task {
+            id: TaskId::from_str("task1"),
+            title: "Test Task".to_string(),
+            status: spl_core::TaskStatus::Ready,
+            priority: 0,
+            tags: vec![],
+        };
+        runner.storage.insert_task(task).unwrap();
+        runner.storage.insert_spec_revision("spec1", "task1", "hash", "path", 0).unwrap();
+        runner.storage.insert_revision_row("rev1", "task1", "spec1", "hash", "default", "[]", "[]", "[]", 0).unwrap();
+        runner.enqueue_execute("task1", "rev1").unwrap();
+        let snap = runner.storage.load_snapshot(i64::MAX).unwrap();
+        assert_eq!(snap.queue.len(), 1);
+        assert_eq!(snap.queue[0].task_id.as_str(), "task1");
+    }
+}
